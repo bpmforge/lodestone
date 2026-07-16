@@ -1,0 +1,38 @@
+{
+  "name": "@bpmforge/lodestone",
+  "version": "0.1.0",
+  "description": "Lodestone — CPU-only code index + retrieval engine: cAST chunking, BM25F, symbol graph, concept-ontology expansion, evidence packets. Library + MCP server.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "lodestone-mcp": "dist/index.js",
+    "bpm-code-search-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --out-dir dist",
+    "dev": "tsup src/index.ts --format esm --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "better-sqlite3": "^11.10.0",
+    "glob": "^11.0.0",
+    "sqlite-vec": "^0.1.9",
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "^0.25.9",
+    "yaml": "^2.9.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

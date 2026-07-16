@@ -1,0 +1,357 @@
+# Security Concept Ontology — v0.2 (2026-07-16, W4-01 expansion)
+# PROPRIETARY — CodeReckon/RepoPulse moat asset. Moves to Lodestone repo when created.
+# Purpose: zero-LLM query expansion. query concept -> union(terms, subtokens, packages)
+#   -> BM25F (symbols boosted) + vector kNN -> RRF -> caller/callee cluster.
+# Also inverts to a COVERAGE signal: concept present in repo but no rule-pack hits => escalation trigger.
+# Seeded from CWE names, OWASP cheat-sheet vocabulary, per-ecosystem package names.
+# Conventions: terms are identifier-fragments (matched raw + camel/snake-split);
+#   packages keyed by ecosystem; cwe = primary CWE anchors for report traceability.
+#
+# W4-01 (2026-07-16) expanded the v0.1 seed (20 concepts) to 42 concepts, adding:
+#   - Full OWASP Top-10 (web, 2021) coverage: A01 Broken Access Control (authorization
+#     extended +CWE-284/269), A02 Cryptographic Failures (cryptography extended
+#     +CWE-295/297/319), A03 Injection (+injection_nosql_ldap_xpath), A04 Insecure
+#     Design (+insecure_design), A05 Security Misconfiguration (infra_iac extended
+#     +CWE-276), A06 Vulnerable/Outdated Components (+supply_chain_dependencies),
+#     A07 Auth Failures (authentication/session_management, session_management
+#     extended +CWE-352 CSRF), A08 Software/Data Integrity Failures
+#     (+software_data_integrity), A09 Logging Failures (logging_audit, unchanged),
+#     A10 SSRF (ssrf_outbound, unchanged).
+#   - Full OWASP LLM Top-10 (2025) coverage as 10 new llm_* concepts (LLM01-LLM10),
+#     alongside the original generic llm_ai concept (kept as-is).
+#   - The CWE Top 25 Most Dangerous Software Weaknesses (2024, MITRE/CISA) — all 25
+#     present, spread across new + extended concepts (see memory_safety for the
+#     memory-corruption cluster: CWE-787/125/119/416/476/190/843/704/415).
+# CWE grounding note: every CWE id below is a real MITRE CWE id. Where no CWE maps
+# cleanly onto an LLM-specific weakness (e.g. LLM09 Misinformation), the closest
+# existing anchor is reused deliberately (CWE-1426, already established for
+# `llm_ai` by W3-05) rather than inventing a new id — see the llm_* concepts below.
+# Do NOT hand-invent CWE numbers when adding future concepts; verify against the
+# MITRE CWE database first.
+#
+# FUTURE TICKET (not this one — src/ontology/index.ts is outside W4-01's write_scope):
+# expand() is purely lexical (query token must literally hit a concept key/term).
+# It does NOT co-activate related concepts, so e.g. "where is password handling"
+# matches only password_storage, not authentication — related-but-not-lexically-
+# overlapping concepts (auth <-> session_management <-> tokens_jwt, or the new
+# llm_* cluster) never join a query's expansion unless the query also mentions
+# their terms directly. A future ticket could add an optional `related: [key,...]`
+# field per concept here and teach expand() to optionally pull related concepts'
+# terms too — deliberately out of scope for this data-only ticket.
+
+version: 0.2
+concepts:
+  authentication:
+    cwe: [287, 306, 307]
+    terms: [login, logout, signin, signup, authenticate, credential, mfa, totp, otp,
+            sso, oauth, oidc, saml, ldap, kerberos, identity, principal, passwordless, magiclink]
+    packages:
+      npm: [passport, next-auth, "@auth/core", lucia, firebase-auth, "@clerk/clerk-sdk-node", supertokens]
+      pypi: [django-allauth, authlib, flask-login, python-social-auth, fastapi-users]
+      go: [golang.org/x/oauth2, github.com/coreos/go-oidc, github.com/markbates/goth]
+      maven: [spring-security, pac4j, apache-shiro]
+  session_management:
+    cwe: [384, 613, 352]  # 352 = CSRF (OWASP A01/2021, CWE Top-25 #4)
+    terms: [session, cookie, csrf, xsrf, samesite, httponly, remember_me, sessionid, sid,
+            refresh_token, revoke, expiry, idle_timeout]
+    packages:
+      npm: [express-session, cookie-session, iron-session, csurf]
+      pypi: [itsdangerous, flask-session]
+  tokens_jwt:
+    cwe: [345, 347]
+    terms: [jwt, jwk, jwks, claims, bearer, access_token, id_token, alg, hs256, rs256,
+            audience, issuer, exp, nbf, verify_signature]
+    packages:
+      npm: [jsonwebtoken, jose, fast-jwt]
+      pypi: [pyjwt, python-jose]
+      go: [github.com/golang-jwt/jwt]
+  authorization:
+    cwe: [285, 639, 862, 863, 284, 269]  # 284/269 = OWASP A01 broken access control + privilege mgmt
+    terms: [authorize, permission, role, rbac, abac, acl, policy, scope, grant, entitlement,
+            can, ability, is_admin, owner_id, tenant_id, idor]
+    packages:
+      npm: [casl, casbin, "@aws-sdk/client-verifiedpermissions", oso]
+      pypi: [django-guardian, casbin, oso]
+      go: [github.com/casbin/casbin]
+  password_storage:
+    cwe: [256, 257, 916]
+    terms: [password, passwd, pwd, hash, salt, pepper, bcrypt, scrypt, argon2, pbkdf2,
+            rounds, work_factor, rehash, plaintext]
+    packages:
+      npm: [bcrypt, bcryptjs, argon2]
+      pypi: [passlib, bcrypt, argon2-cffi]
+  cryptography:
+    cwe: [327, 328, 330, 338, 295, 297, 319]  # +295/297 cert validation, +319 cleartext transmission (OWASP A02)
+    terms: [encrypt, decrypt, cipher, aes, gcm, cbc, ecb, rsa, ecdsa, ed25519, hmac, sha1,
+            sha256, md5, iv, nonce, random, prng, keygen, kdf, hkdf, tls, x509, certificate,
+            verify_ssl, insecure_skip_verify, trust_all_certs, hostname_verification, cert_pinning]
+    packages:
+      npm: [crypto, node-forge, tweetnacl, "@noble/ciphers"]
+      pypi: [cryptography, pycryptodome, nacl]
+      go: [crypto/aes, crypto/rand, golang.org/x/crypto]
+  secrets_config:
+    cwe: [798, 522, 312]
+    terms: [secret, api_key, apikey, token, private_key, credentials, dotenv, env, vault,
+            kms, keychain, connection_string, dsn, service_account]
+    packages:
+      npm: [dotenv, "@aws-sdk/client-secrets-manager", node-vault]
+      pypi: [python-dotenv, hvac, boto3]
+  input_validation:
+    cwe: [20, 79, 1287]
+    terms: [validate, sanitize, escape, encode, whitelist, allowlist, schema, coerce, parse,
+            xss, innerhtml, dangerouslysetinnerhtml, eval, strip_tags]
+    packages:
+      npm: [zod, joi, yup, validator, dompurify, ajv, express-validator]
+      pypi: [pydantic, marshmallow, cerberus, bleach]
+      go: [github.com/go-playground/validator]
+  sql_database:
+    cwe: [89, 943]
+    terms: [query, execute, raw, prepared, parameterize, placeholder, sql_injection, sqli,
+            orm, migration, transaction, escape_string, format_sql]
+    packages:
+      npm: [pg, mysql2, knex, prisma, drizzle-orm, typeorm, sequelize]
+      pypi: [sqlalchemy, psycopg2, django.db, asyncpg]
+      go: [database/sql, github.com/jmoiron/sqlx, gorm.io/gorm]
+  deserialization:
+    cwe: [502]
+    terms: [deserialize, unserialize, pickle, loads, unmarshal, yaml_load, readobject,
+            fromjson, parse_obj, gob, marshal]
+    packages:
+      pypi: [pickle, dill, pyyaml, jsonpickle]
+      npm: [serialize-javascript, node-serialize]
+  file_upload_path:
+    cwe: [22, 434, 73]
+    terms: [upload, multipart, filename, mimetype, path_traversal, basename, realpath, resolve,
+            sendfile, readfile, writefile, tmpdir, symlink, zip_slip, extract]
+    packages:
+      npm: [multer, formidable, busboy, adm-zip, tar]
+      pypi: [werkzeug.utils, secure_filename, zipfile, tarfile]
+  ssrf_outbound:
+    cwe: [918]
+    terms: [fetch, request, urlopen, webhook, callback_url, redirect_uri, proxy, internal,
+            metadata, 169.254.169.254, localhost, dns_rebind, url_parse]
+    packages:
+      npm: [axios, node-fetch, got, undici]
+      pypi: [requests, httpx, urllib]
+  command_execution:
+    cwe: [77, 78, 94]
+    terms: [exec, spawn, system, popen, shell, subprocess, cmd, shell_true, backtick,
+            child_process, os_system, template_injection, ssti]
+    packages:
+      npm: [child_process, execa, shelljs]
+      pypi: [subprocess, os.system, jinja2]
+  logging_audit:
+    cwe: [117, 532, 778]
+    terms: [log, logger, audit, trail, redact, mask, pii_in_logs, console_log, print,
+            structured, correlation_id, trace_id, syslog]
+    packages:
+      npm: [winston, pino, morgan, bunyan]
+      pypi: [logging, structlog, loguru]
+      go: [log/slog, go.uber.org/zap]
+  rate_limiting_dos:
+    cwe: [770, 400, 799]
+    terms: [rate_limit, ratelimit, throttle, quota, backoff, retry, circuit_breaker, bucket,
+            token_bucket, leaky, concurrency, semaphore, timeout, deadline, max_requests]
+    packages:
+      npm: [express-rate-limit, bottleneck, p-limit, rate-limiter-flexible]
+      pypi: [slowapi, limits, tenacity]
+  http_headers_cors:
+    cwe: [346, 942, 1021]
+    terms: [cors, origin, access_control_allow, csp, content_security_policy, hsts, x_frame,
+            referrer_policy, helmet, preflight, wildcard_origin, clickjack]
+    packages:
+      npm: [cors, helmet]
+      pypi: [django-cors-headers, flask-cors]
+  payment_billing:
+    cwe: [840]
+    terms: [payment, charge, invoice, subscription, refund, checkout, price, amount, currency,
+            webhook_signature, idempotency_key, stripe, plaid, billing]
+    packages:
+      npm: [stripe, braintree, "@paypal/checkout-server-sdk"]
+      pypi: [stripe, braintree]
+  pii_data:
+    cwe: [359, 200, 311]
+    terms: [pii, ssn, dob, email, phone, address, gdpr, ccpa, consent, retention, erasure,
+            anonymize, pseudonymize, redact, export_data, right_to_delete]
+    packages: {}
+  llm_ai:
+    cwe: [1426]  # + OWASP LLM Top-10 2025 mapping lives in rule packs
+    terms: [prompt, completion, system_prompt, tool_call, function_call, agent, rag, embedding,
+            temperature, max_tokens, prompt_injection, jailbreak, guardrail, moderation]
+    packages:
+      npm: ["@anthropic-ai/sdk", openai, langchain, llamaindex, ai]
+      pypi: [anthropic, openai, langchain, llama-index, litellm]
+  infra_iac:
+    cwe: [16, 1188, 276]  # +276 incorrect default permissions (OWASP A05 misconfiguration)
+    terms: [terraform, cloudformation, pulumi, dockerfile, compose, helm, kubernetes, iam,
+            security_group, bucket_policy, public_read, privileged, host_network, root_user,
+            default_credentials, debug_mode, directory_listing, unnecessary_feature]
+    packages: {}
+
+  # --- W4-01 additions below: OWASP Web A01-A10 gaps + OWASP LLM Top-10 (2025) + CWE Top-25 breadth ---
+
+  injection_nosql_ldap_xpath:
+    cwe: [943, 90, 643, 1236]
+    terms: [nosql, nosql_injection, mongo_injection, mongodb_where, dollar_where,
+            aggregation_pipeline, ldap_injection, ldap_filter, xpath_injection,
+            csv_injection, formula_injection, graphql_injection]
+    packages:
+      npm: [mongoose, mongodb, ldapjs]
+      pypi: [pymongo, ldap3, python-ldap]
+      go: [go.mongodb.org/mongo-driver]
+
+  insecure_design:
+    cwe: [657]
+    terms: [threat_model, secure_design, business_logic_flaw, abuse_case, trust_boundary,
+            defense_in_depth, fail_open, fail_closed, negative_testing, security_requirement]
+    packages: {}
+
+  supply_chain_dependencies:
+    cwe: [1104, 937]
+    terms: [dependency, dependencies, lockfile, package_lock, sbom, cve, vulnerable_dependency,
+            outdated_package, npm_audit, pip_audit, cargo_audit, govulncheck, typosquat,
+            slopsquat, malicious_package, transitive_dependency, unpinned_version]
+    packages:
+      npm: [snyk, socket]
+      pypi: [pip-audit, safety]
+      go: [golang.org/x/vuln/cmd/govulncheck]
+
+  software_data_integrity:
+    cwe: [829, 494, 345]
+    terms: [code_signing, checksum, integrity_check, subresource_integrity, sri, sigstore,
+            cosign, unsigned_update, auto_update, ci_pipeline, build_artifact,
+            github_actions, untrusted_plugin]
+    packages:
+      npm: ["@sigstore/cli"]
+
+  xxe_xml:
+    cwe: [611, 776]
+    terms: [xxe, xml, external_entity, dtd, entity_expansion, billion_laughs, xml_parser,
+            resolve_entity, disable_dtd, xinclude]
+    packages:
+      npm: [xml2js, fast-xml-parser, libxmljs]
+      pypi: [lxml, defusedxml, xmltodict]
+      go: [encoding/xml]
+
+  open_redirect:
+    cwe: [601]
+    terms: [open_redirect, redirect, location_header, return_url, next_url, redirect_to,
+            unvalidated_redirect]
+    packages: {}
+
+  prototype_pollution:
+    cwe: [1321]
+    terms: [prototype_pollution, __proto__, constructor_prototype, deep_merge,
+            object_assign, merge_recursive]
+    packages:
+      npm: [lodash, deepmerge, merge]
+
+  redos:
+    cwe: [1333]
+    terms: [redos, regex, regexp, regular_expression, catastrophic_backtracking,
+            exponential_backtracking]
+    packages:
+      npm: [safe-regex, re2]
+      pypi: [re2]
+
+  mass_assignment:
+    cwe: [915]
+    terms: [mass_assignment, strong_parameters, permit_params, auto_bind, model_binding,
+            overposting]
+    packages:
+      pypi: [djangorestframework]
+
+  race_condition_toctou:
+    cwe: [362, 367]
+    # NOTE: deliberately no "time_of_check"/"time_of_use"/"check_then_act" terms —
+    # they'd subtoken-split to the bare stopword "of"/"then", false-activating this
+    # concept on ordinary queries ("verification of the cert"). toctou/atomic_operation
+    # already anchor the TOCTOU concept without that noise.
+    terms: [race_condition, toctou, atomic_operation, double_spend, mutex_lock]
+    packages: {}
+
+  memory_safety:
+    cwe: [787, 125, 119, 416, 476, 190, 843, 704, 415]
+    # NOTE: no "out_of_bounds" term — splits to bare "of" (same stopword-pollution
+    # reason as race_condition_toctou above). bounds_check/buffer_overflow cover it.
+    terms: [buffer_overflow, use_after_free, double_free,
+            null_pointer_dereference, integer_overflow, wraparound, type_confusion,
+            unsafe_cast, raw_pointer, memcpy, strcpy, alloca, unsafe_block, bounds_check]
+    packages: {}
+
+  error_disclosure:
+    cwe: [209]
+    terms: [stack_trace, debug_mode, verbose_error, error_message, exception_details,
+            traceback, print_exc, dump_state]
+    packages: {}
+
+  # OWASP LLM Top-10 (2025), one concept per category (LLM01-LLM10).
+  # The pre-existing `llm_ai` concept above is kept as a generic catch-all.
+  llm_prompt_injection:
+    cwe: [1426, 20]  # LLM01:2025
+    terms: [prompt_injection, indirect_prompt_injection, jailbreak, instruction_override,
+            delimiter_injection, untrusted_context, tool_output_injection,
+            injected_instructions]
+    packages: {}
+
+  llm_sensitive_disclosure:
+    cwe: [200, 359]  # LLM02:2025
+    terms: [sensitive_info_disclosure, training_data_leak, memorization, data_leakage,
+            pii_leak, model_inversion, membership_inference]
+    packages: {}
+
+  llm_supply_chain:
+    cwe: [1104, 937]  # LLM03:2025
+    terms: [model_supply_chain, third_party_model, model_registry, huggingface,
+            model_card, pretrained_weights, lora_adapter, fine_tune_source,
+            model_provenance]
+    packages:
+      pypi: [transformers, huggingface_hub]
+      npm: ["@huggingface/hub"]
+
+  llm_data_poisoning:
+    cwe: [20]  # LLM04:2025
+    terms: [data_poisoning, model_poisoning, training_data, backdoor_trigger,
+            label_flipping, rag_poisoning, embedding_poisoning, adversarial_input]
+    packages: {}
+
+  llm_output_handling:
+    cwe: [79, 94]  # LLM05:2025
+    terms: [output_handling, unsanitized_output, markdown_injection,
+            render_llm_output, html_from_llm, code_execution_from_output,
+            eval_llm_response]
+    packages: {}
+
+  llm_excessive_agency:
+    cwe: [269, 862]  # LLM06:2025
+    terms: [excessive_agency, autonomous_action, tool_permission, function_calling,
+            agent_scope, overprivileged_agent, auto_approve, human_oversight,
+            tool_use, mcp_server]
+    packages: {}
+
+  llm_system_prompt_leakage:
+    cwe: [200]  # LLM07:2025
+    terms: [system_prompt_leak, prompt_leak, reveal_instructions,
+            extract_system_prompt, hidden_instructions]
+    packages: {}
+
+  llm_vector_embedding:
+    cwe: [668]  # LLM08:2025
+    terms: [vector_store, embedding, pgvector, pinecone, weaviate, qdrant, chroma,
+            faiss, embedding_inversion, similarity_search, rag, knn_search]
+    packages:
+      npm: ["@pinecone-database/pinecone", chromadb]
+      pypi: [pinecone-client, chromadb, faiss-cpu, weaviate-client]
+
+  llm_misinformation:
+    cwe: [1426]  # LLM09:2025 — no dedicated CWE; reuses the genAI-output anchor
+    terms: [hallucination, misinformation, ungrounded_output, factuality,
+            citation_check, fact_check, confidence_calibration]
+    packages: {}
+
+  llm_unbounded_consumption:
+    cwe: [400, 770]  # LLM10:2025
+    terms: [unbounded_consumption, token_limit, max_tokens, context_window,
+            denial_of_wallet, cost_explosion, recursive_agent_loop,
+            uncontrolled_generation]
+    packages: {}

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.code-search/
+*.db
+*.db-shm
+*.db-wal

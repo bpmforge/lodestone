@@ -1,0 +1,87 @@
+{
+  "description": "Golden retrieval judgments for query() (src/search/query.ts) against the fixture repo in eval/fixtures/sample-repo. 'relevant' paths are repo-relative (posix separators). 'concept' cross-references the ontology key (ontology/concepts.yaml) the query is meant to exercise -- informational only, not used by the scorer.",
+  "judgments": [
+    {
+      "query": "where is password handling",
+      "concept": "password_storage",
+      "relevant": ["auth/passwordHash.ts"]
+    },
+    {
+      "query": "hash a password with bcrypt",
+      "concept": "password_storage",
+      "relevant": ["auth/passwordHash.ts"]
+    },
+    {
+      "query": "jwt verification",
+      "concept": "tokens_jwt",
+      "relevant": ["auth/jwtVerify.ts"]
+    },
+    {
+      "query": "verify a bearer token signature",
+      "concept": "tokens_jwt",
+      "relevant": ["auth/jwtVerify.ts"]
+    },
+    {
+      "query": "csrf token validation",
+      "concept": "session_management",
+      "relevant": ["auth/session.ts"]
+    },
+    {
+      "query": "session revoke and expiry",
+      "concept": "session_management",
+      "relevant": ["auth/session.ts"]
+    },
+    {
+      "query": "sql query building for user lookup",
+      "concept": "sql_database",
+      "relevant": ["db/userQuery.ts"]
+    },
+    {
+      "query": "file upload path handling",
+      "concept": "file_upload_path",
+      "relevant": ["api/uploadHandler.ts"]
+    },
+    {
+      "query": "shell command execution",
+      "concept": "command_execution",
+      "relevant": ["api/execTool.ts"]
+    },
+    {
+      "query": "api key secret loading",
+      "concept": "secrets_config",
+      "relevant": ["config/secretsLoader.ts"]
+    },
+    {
+      "query": "rate limiting requests per client",
+      "concept": "rate_limiting_dos",
+      "relevant": ["api/rateLimiter.ts"]
+    },
+    {
+      "query": "input sanitization",
+      "concept": "input_validation",
+      "relevant": ["utils/inputValidator.ts"]
+    },
+    {
+      "query": "security audit log event",
+      "concept": "logging_audit",
+      "relevant": ["utils/auditLogger.ts"]
+    },
+    {
+      "query": "user login flow",
+      "concept": "authentication",
+      "relevant": ["routes/loginRoute.ts", "auth/passwordHash.ts"]
+    },
+    {
+      "query": "argon2 pepper work factor credential hashing",
+      "concept": "password_storage",
+      "relevant": ["auth/passwordHash.ts"],
+      "note": "ontology-only bridge: none of argon2/pepper/work_factor/credential are literal tokens in passwordHash.ts (which uses bcrypt/salt/hash) -- only expand() reaching password_storage's term list connects this query to the file. Catches an ontology-expansion regression that pure BM25F would miss."
+    },
+    {
+      "query": "hs256 rs256 jwks audience issuer token verification",
+      "concept": "tokens_jwt",
+      "relevant": ["auth/jwtVerify.ts"],
+      "note": "ontology-only bridge: hs256/rs256/jwks/audience/issuer are tokens_jwt terms not literally present in jwtVerify.ts (which has aud/exp, not audience/issuer) -- only expand() connects this query to the file."
+    }
+  ]
+}
