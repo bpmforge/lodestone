@@ -25,6 +25,12 @@ export interface Finding {
    *  see MASTER_PROMPT.md guardrail 1). Used directly as the expand() seed
    *  when present, ahead of message/ruleId. */
   concept?: string;
+  /** CWE anchors from a rule's metadata.cwe (bpm-rulepacks convention, same
+   *  guardrail as `concept` above — see AUTHORING.md's provenance block).
+   *  Used by coverage.ts to test a finding against an ontology concept's own
+   *  `cwe` anchors — a finding on the same CWE as a present concept counts
+   *  as coverage even when `concept` itself wasn't set. */
+  cwe?: number[];
 }
 
 export interface EvidenceChunk {
