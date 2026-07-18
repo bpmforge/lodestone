@@ -3,14 +3,24 @@
   "version": "0.1.0",
   "description": "Lodestone — CPU-only code index + retrieval engine: cAST chunking, BM25F, symbol graph, concept-ontology expansion, evidence packets. Library + MCP server.",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/lib.js",
+  "module": "dist/lib.js",
+  "types": "dist/lib.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
-    "lodestone-mcp": "dist/index.js",
-    "bpm-code-search-mcp": "dist/index.js"
+    "lodestone-mcp": "dist/mcp.js",
+    "bpm-code-search-mcp": "dist/mcp.js"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --out-dir dist",
-    "dev": "tsup src/index.ts --format esm --watch",
+    "build": "tsup src/lib.ts src/mcp.ts src/index.ts --format esm --dts --out-dir dist",
+    "dev": "tsup src/mcp.ts --format esm --watch",
+    "prepare": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
