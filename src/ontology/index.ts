@@ -15,7 +15,7 @@
  * "logi**n**", `env` inside "**env**ironment", `iv` inside "pr**iv**ate").
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -39,11 +39,28 @@ export interface ExpandResult {
   packages: string[];
 }
 
+/**
+ * Walk up from `startDir` to the nearest ancestor containing a
+ * package.json — the package root, regardless of how deep this module
+ * lives under it. A fixed `../..` relative to `__dirname` (the previous
+ * approach) only worked when this file ran straight out of `src/ontology/`;
+ * it silently pointed one directory ABOVE the repo once tsup bundled it
+ * into a single `dist/*.js` file (W3-10 — caught because a plain-node
+ * consumer of the built package hit ENOENT on the default ontology path).
+ */
+function findPackageRoot(startDir: string): string {
+  let dir = startDir;
+  for (;;) {
+    if (existsSync(path.join(dir, "package.json"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return startDir; // reached filesystem root — give up, keep original
+    dir = parent;
+  }
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ONTOLOGY_PATH = path.join(
-  __dirname,
-  "..",
-  "..",
+  findPackageRoot(__dirname),
   "ontology",
   "concepts.yaml",
 );
