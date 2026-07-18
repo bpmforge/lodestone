@@ -19,7 +19,13 @@ export class LmStudioProvider implements EmbeddingProvider {
       const res = await fetch(`${this.baseUrl}/v1/models`, {
         signal: AbortSignal.timeout(2000),
       });
-      return res.ok;
+      if (!res.ok) return false;
+      // LM Studio can have a *different* embedding model loaded (e.g.
+      // CodeRankEmbed) while still answering /v1/models — a bare res.ok
+      // check would report "available" and then fail at embed() time.
+      // Confirm this specific model id is the one currently loaded.
+      const body = (await res.json()) as { data?: Array<{ id: string }> };
+      return (body.data ?? []).some((m) => m.id === this.model);
     } catch {
       return false;
     }
