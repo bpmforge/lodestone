@@ -63,6 +63,9 @@ describe("src/lib.ts barrel", () => {
     expect(typeof lib.computeComplexity).toBe("function");
     expect(typeof lib.computeDuplication).toBe("function");
     expect(typeof lib.computeDeadCode).toBe("function");
+    expect(typeof lib.computeSingleImplementation).toBe("function");
+    expect(typeof lib.computeSingleUseHelper).toBe("function");
+    expect(typeof lib.computePhantomImports).toBe("function");
     expect(typeof lib.detectProvider).toBe("function");
   });
 
