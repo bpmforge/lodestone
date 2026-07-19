@@ -69,3 +69,14 @@ export type {
 } from "./metrics/duplication.js";
 export { computeDeadCode } from "./metrics/deadCode.js";
 export type { DeadCodeFinding, DeadCodeOptions } from "./metrics/deadCode.js";
+
+// --- Symbol-graph-driven ANTI_SLOP detectors (W3-10) ------------------------
+export { computeSingleImplementation } from "./metrics/singleImplementation.js";
+export type { SingleImplementationFinding } from "./metrics/singleImplementation.js";
+export { computeSingleUseHelper } from "./metrics/singleUseHelper.js";
+export type {
+  SingleUseHelperFinding,
+  SingleUseHelperOptions,
+} from "./metrics/singleUseHelper.js";
+export { computePhantomImports } from "./metrics/phantomImports.js";
+export type { PhantomImportFinding } from "./metrics/phantomImports.js";
