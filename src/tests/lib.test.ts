@@ -67,6 +67,10 @@ describe("src/lib.ts barrel", () => {
     expect(typeof lib.computeSingleUseHelper).toBe("function");
     expect(typeof lib.computePhantomImports).toBe("function");
     expect(typeof lib.detectProvider).toBe("function");
+    expect(typeof lib.computeUntestedSurface).toBe("function");
+    expect(typeof lib.computeDependencyCycles).toBe("function");
+    expect(typeof lib.buildResolvedImportGraph).toBe("function");
+    expect(typeof lib.computeCouplingOutliers).toBe("function");
   });
 
   it("src/index.ts re-exports the same names as src/lib.ts (compat shim)", () => {

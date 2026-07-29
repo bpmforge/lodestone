@@ -80,3 +80,20 @@ export type {
 } from "./metrics/singleUseHelper.js";
 export { computePhantomImports } from "./metrics/phantomImports.js";
 export type { PhantomImportFinding } from "./metrics/phantomImports.js";
+
+// --- Tier-1 symbol-graph detectors (health-detectors ticket) ------------
+export { computeUntestedSurface } from "./metrics/untestedSurface.js";
+export type {
+  UntestedSurfaceFinding,
+  UntestedSurfaceOptions,
+} from "./metrics/untestedSurface.js";
+export {
+  computeDependencyCycles,
+  buildResolvedImportGraph,
+} from "./metrics/dependencyCycles.js";
+export type { DependencyCycleFinding } from "./metrics/dependencyCycles.js";
+export { computeCouplingOutliers } from "./metrics/couplingOutliers.js";
+export type {
+  CouplingOutlierFinding,
+  CouplingOutlierOptions,
+} from "./metrics/couplingOutliers.js";
