@@ -243,6 +243,19 @@ module.exports.otherFn = () => {
     );
     expect(callers.some((c) => c.caller === "<module>")).toBe(false);
   });
+
+  it("is export Y unused: an unreferenced 'exports.X = fn' has a def but zero refs (not a permanent self-ref false-positive)", async () => {
+    const dead = `
+exports.deadFn = function () {
+  return 1;
+};
+`;
+    const g = await extractGraph(dead, "src/util.js");
+    const def = g.defs.find((d) => d.symbol === "deadFn");
+    expect(def).toBeDefined();
+    const refs = g.refs.filter((r) => r.symbol === "deadFn");
+    expect(refs).toHaveLength(0);
+  });
 });
 
 describe("extractGraph — Python (tree-sitter tier)", () => {

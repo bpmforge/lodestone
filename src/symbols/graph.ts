@@ -395,6 +395,21 @@ function extractRefsCallsImports(
   // best-effort elsewhere — see module doc).
   const defNameRanges = new Set<string>();
   function markDefName(node: Node): void {
+    // classifyCjsExportAssignment()'s node shape is `assignment_expression`
+    // (left/right fields, no "name" field), so the generic lookup below
+    // never finds anything for it — without this branch, `exports.X = fn`'s
+    // own `X` property-name node would be recorded as a ref to itself,
+    // making a CJS property export permanently look "used" and defeating
+    // dead-code detection (see graph.test.ts "exports.X = <fn>" block).
+    if (node.type === "assignment_expression") {
+      const property = node
+        .childForFieldName("left")
+        ?.childForFieldName("property");
+      if (property) {
+        defNameRanges.add(`${property.startIndex}:${property.endIndex}`);
+        return;
+      }
+    }
     const nameNode = adapter.unwrap(node).childForFieldName("name");
     if (nameNode)
       defNameRanges.add(`${nameNode.startIndex}:${nameNode.endIndex}`);
