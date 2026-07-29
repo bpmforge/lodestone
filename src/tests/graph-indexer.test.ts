@@ -107,15 +107,21 @@ export function run(): number {
     );
 
     // CommonJS sibling of the util.ts/consumer.ts pair above: cjsHelperFn is
-    // defined here...
+    // defined here, via the 'exports.X = <fn>' property-assignment form
+    // (the actual D-03 repro shape) rather than a plain function
+    // declaration — this exercises classifyCjsExportAssignment() end-to-end
+    // through indexPath -> db, not just at the extractGraph() unit-test
+    // level (see graph.test.ts for that level).
     fs.writeFileSync(
       path.join(repo.dir, "cjsUtil.js"),
       `
-function cjsHelperFn() {
+function cjsInner() {
   return 1;
 }
 
-module.exports = { cjsHelperFn };
+exports.cjsHelperFn = function () {
+  return cjsInner();
+};
 `,
     );
     // ...and only ever referenced (via require()) from a different file.
@@ -180,6 +186,14 @@ module.exports = { cjsRun };
     await indexPath(repo.dir, dbHandle.db, fakeProvider);
     const callers = dbHandle.db.queryCallers("cjsHelperFn");
     expect(callers.map((c) => c.caller)).toContain("cjsRun");
+  });
+
+  it("(a) who calls X: 'cjsInner' resolves to caller 'cjsHelperFn' (the D-03 'exports.X = fn' defining-side fix, proven end-to-end through indexPath -> db, not just extractGraph())", async () => {
+    await indexPath(repo.dir, dbHandle.db, fakeProvider);
+    expect(dbHandle.db.queryDefs("cjsHelperFn").length).toBeGreaterThan(0);
+    const callers = dbHandle.db.queryCallers("cjsInner");
+    expect(callers.map((c) => c.caller)).toContain("cjsHelperFn");
+    expect(callers.map((c) => c.caller)).not.toContain("<module>");
   });
 
   it("(c) require() import edge stores the literal extension-less specifier, same as ESM's './hash' above — this codebase does no path resolution anywhere; the 'who calls X' test above is the actual proof that cross-file linkage works, via the name-based calls/refs tables, not via this specifier", async () => {
