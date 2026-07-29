@@ -9,10 +9,38 @@
  * retrieval layer's query-expansion step.
  *
  * Matching is whole-token, not substring: the query is tokenized (lowercased,
- * split on non-alphanumeric + camelCase boundaries) and a concept matches
- * only if its key or one of its terms shares a token with the query. Plain
- * substring matching would false-positive badly on short terms (`log` inside
- * "logi**n**", `env` inside "**env**ironment", `iv` inside "pr**iv**ate").
+ * split on non-alphanumeric + camelCase boundaries). Plain substring matching
+ * would false-positive badly on short terms (`log` inside "logi**n**", `env`
+ * inside "**env**ironment", `iv` inside "pr**iv**ate").
+ *
+ * A concept matches if its key OR one of its terms matches. An identifier
+ * (key or term) is split into subtokens (`ssrf_outbound` -> `ssrf`,
+ * `outbound`); the ones that are GENERIC (see `isGenericToken()`) are
+ * ignored as candidates, and the concept matches if the query contains any
+ * ONE of the remaining, distinctive subtokens. Only when EVERY subtoken of
+ * an identifier is generic does matching fall back to requiring the whole
+ * phrase (all subtokens present).
+ *
+ * This is W4-05's fix for a precision bug: the pre-fix matcher fired on any
+ * ONE shared subtoken with no generic-word filter, so multi-word identifiers
+ * shed generic English words (`code` from `code_signing`, `assignment` from
+ * the key `mass_assignment`) into the match set — a query merely containing
+ * that common word pulled in whatever concept happened to contain it as a
+ * compound fragment (e.g. "dead code" wrongly matched `software_data_integrity`,
+ * "unused assignment" wrongly matched `mass_assignment`).
+ *
+ * An earlier version of this fix required the WHOLE phrase for every
+ * multi-word identifier, key or term, with no generic/distinctive
+ * distinction. That over-corrected: `ssrf_outbound`'s key needs both `ssrf`
+ * AND `outbound`, so a bare "SSRF" query — exactly how CWE/OWASP shorthand
+ * is used in practice — stopped matching, along with "rate limiting" (needs
+ * `rate`+`limiting`+`dos`), "secrets" (`secrets`+`config`), and "logging"
+ * (`logging`+`audit`). The generic/distinctive split fixes the precision
+ * bug without that recall cost: `ssrf` is distinctive (it doesn't collide
+ * with any other concept), so it alone still anchors `ssrf_outbound`, while
+ * `assignment` is on the generic denylist so it alone can't anchor
+ * `mass_assignment`. See `isGenericToken()`, `identifierMatches()`, and
+ * src/tests/ontology.test.ts's "W4-05" describe blocks.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -115,14 +143,145 @@ function tokenize(text: string): Set<string> {
   return new Set(splitIdentifier(text));
 }
 
-/** All match tokens for a concept: its key plus every term, each subtoken-split. */
-function conceptMatchTokens(concept: OntologyConcept): Set<string> {
-  const tokens = new Set<string>();
-  for (const tok of splitIdentifier(concept.key)) tokens.add(tok);
-  for (const term of concept.terms) {
-    for (const tok of splitIdentifier(term)) tokens.add(tok);
+/**
+ * A small, hand-justified set of generic programming/English nouns that
+ * should never anchor a match on their own, even when they don't happen to
+ * collide with another concept in this particular ontology. These are the
+ * kind of context-free words a routine finding (a dead-code report, an
+ * "unused variable" lint, ...) mentions constantly regardless of any
+ * specific vulnerability class — `assignment` is the concrete case: nothing
+ * else in the ontology contains it (so the collision-count signal below
+ * doesn't catch it), but it's exactly as generic as `code`/`data`/`output`,
+ * and is the token responsible for "unused assignment" wrongly matching
+ * `mass_assignment` via that concept's own key. Kept intentionally short —
+ * see `computeCollisionGenericTokens()` for the data-driven majority of
+ * generic-token detection.
+ */
+const MANUAL_GENERIC_TOKENS: ReadonlySet<string> = new Set([
+  "code",
+  "data",
+  "output",
+  "input",
+  "assignment",
+  "handling",
+  "management",
+  "storage",
+  "config",
+  "file",
+  "path",
+  "check",
+  "access",
+]);
+
+/** Grammatical function words: never distinctive regardless of collision status. */
+const STOPWORD_TOKENS: ReadonlySet<string> = new Set([
+  "a",
+  "an",
+  "the",
+  "of",
+  "in",
+  "on",
+  "at",
+  "by",
+  "to",
+  "from",
+  "and",
+  "or",
+  "for",
+  "with",
+  "is",
+  "are",
+]);
+
+const collisionGenericCache = new WeakMap<Ontology, Set<string>>();
+
+/**
+ * Data-driven generic-token detection: a subtoken is "collision-generic" if
+ * it's owned (appears in the key or a term) by 2+ DISTINCT concepts in the
+ * ontology. Cheap evidence that the word is a common fragment rather than a
+ * specific identifier — e.g. `code` is shed by both `software_data_integrity`
+ * (`code_signing`) and `llm_output_handling` (`code_execution_from_output`);
+ * `execution` collides between `command_execution`'s own key and
+ * `llm_output_handling`'s `code_execution_from_output` term; `llm` collides
+ * across all 11 `llm_*` concepts. Self-maintaining: adding or renaming
+ * concepts in ontology/concepts.yaml recomputes this automatically, unlike a
+ * hardcoded list. Cached per `Ontology` object (parallel to
+ * `getDefaultOntology()`'s own caching) since `expand()` may be called
+ * per-query against the same loaded ontology.
+ */
+function computeCollisionGenericTokens(ontology: Ontology): Set<string> {
+  const cached = collisionGenericCache.get(ontology);
+  if (cached) return cached;
+
+  const owners = new Map<string, Set<string>>();
+  for (const concept of ontology.concepts) {
+    const subtokens = new Set<string>([
+      ...splitIdentifier(concept.key),
+      ...concept.terms.flatMap((term) => splitIdentifier(term)),
+    ]);
+    for (const tok of subtokens) {
+      let ownerSet = owners.get(tok);
+      if (!ownerSet) {
+        ownerSet = new Set();
+        owners.set(tok, ownerSet);
+      }
+      ownerSet.add(concept.key);
+    }
   }
-  return tokens;
+
+  const generic = new Set<string>();
+  for (const [tok, ownerSet] of owners) {
+    if (ownerSet.size >= 2) generic.add(tok);
+  }
+  collisionGenericCache.set(ontology, generic);
+  return generic;
+}
+
+/** Whether a subtoken is too generic to independently anchor a concept match. */
+function isGenericToken(token: string, collisionGeneric: Set<string>): boolean {
+  return (
+    MANUAL_GENERIC_TOKENS.has(token) ||
+    STOPWORD_TOKENS.has(token) ||
+    collisionGeneric.has(token)
+  );
+}
+
+/**
+ * Whether a single identity string (a concept's key, or one of its terms)
+ * matches the query's token set.
+ *
+ * Split the identifier into subtokens and separate out the DISTINCTIVE ones
+ * (not generic per `isGenericToken()`). If there's at least one distinctive
+ * subtoken, the identifier matches when the query contains ANY of them —
+ * generic subtokens in the same identifier are ignored, neither required
+ * nor sufficient (e.g. `ssrf_outbound` -> `ssrf` is distinctive, `outbound`
+ * is not collision-generic either, so both anchor it independently; but
+ * `code_signing` -> `code` is generic so it's ignored, leaving `signing`
+ * as the sole anchor). If EVERY subtoken is generic (e.g.
+ * `code_execution_from_output` -> code/execution/output are all generic),
+ * fall back to requiring the whole phrase, so the identifier is still
+ * reachable by typing it out in full rather than being permanently inert.
+ *
+ * This applies uniformly to the concept key and to terms: the key is just
+ * the concept's canonical identity string and is exactly as prone to
+ * shedding a generic word as any other multi-word term (`mass_assignment`'s
+ * own key sheds `assignment` the same way its `code_signing`-style terms
+ * shed `code` elsewhere in the ontology — see W4-05).
+ */
+function identifierMatches(
+  identifier: string,
+  queryTokens: Set<string>,
+  collisionGeneric: Set<string>,
+): boolean {
+  const subtokens = splitIdentifier(identifier);
+  if (subtokens.length === 0) return false;
+  const distinctive = subtokens.filter(
+    (tok) => !isGenericToken(tok, collisionGeneric),
+  );
+  if (distinctive.length > 0) {
+    return distinctive.some((tok) => queryTokens.has(tok));
+  }
+  return subtokens.every((tok) => queryTokens.has(tok));
 }
 
 /**
@@ -140,15 +299,15 @@ export function expand(
   ontology: Ontology = getDefaultOntology(),
 ): ExpandResult {
   const queryTokens = tokenize(query);
+  const collisionGeneric = computeCollisionGenericTokens(ontology);
   const matched: OntologyConcept[] = [];
   for (const concept of ontology.concepts) {
-    const conceptTokens = conceptMatchTokens(concept);
-    for (const tok of conceptTokens) {
-      if (queryTokens.has(tok)) {
-        matched.push(concept);
-        break;
-      }
-    }
+    const isMatch =
+      identifierMatches(concept.key, queryTokens, collisionGeneric) ||
+      concept.terms.some((term) =>
+        identifierMatches(term, queryTokens, collisionGeneric),
+      );
+    if (isMatch) matched.push(concept);
   }
 
   const concepts = new Set<string>();
