@@ -82,6 +82,112 @@ export function unusedExport(): void {
   });
 });
 
+describe("extractGraph — CommonJS require() (tree-sitter tier)", () => {
+  const src = `
+const { helper } = require("./helper");
+
+function outer() {
+  helper();
+  inner();
+}
+
+function inner() {
+  return;
+}
+
+class UserService {
+  authenticate() {
+    outer();
+    return true;
+  }
+}
+
+function unusedExport() {
+  return;
+}
+
+module.exports = { outer, UserService };
+`;
+
+  it("reports tree-sitter as the extraction method", async () => {
+    const g = await extractGraph(src, "src/auth.js");
+    expect(g.method).toBe("tree-sitter");
+  });
+
+  it("captures defs for functions, classes, and methods", async () => {
+    const g = await extractGraph(src, "src/auth.js");
+    expect(g.defs).toContainEqual(
+      expect.objectContaining({ symbol: "outer", kind: "function" }),
+    );
+    expect(g.defs).toContainEqual(
+      expect.objectContaining({ symbol: "UserService", kind: "class" }),
+    );
+    expect(g.defs).toContainEqual(
+      expect.objectContaining({ symbol: "authenticate", kind: "method" }),
+    );
+  });
+
+  it("who calls X: 'inner' is called from 'outer'", async () => {
+    const g = await extractGraph(src, "src/auth.js");
+    const callers = g.calls.filter((c) => c.callee === "inner");
+    expect(callers).toContainEqual(
+      expect.objectContaining({ caller: "outer" }),
+    );
+  });
+
+  it("who calls X: 'outer' is called from method 'authenticate'", async () => {
+    const g = await extractGraph(src, "src/auth.js");
+    const callers = g.calls.filter((c) => c.callee === "outer");
+    expect(callers).toContainEqual(
+      expect.objectContaining({ caller: "authenticate" }),
+    );
+  });
+
+  it("is export Y unused: 'unusedExport' has a def but zero refs", async () => {
+    const g = await extractGraph(src, "src/auth.js");
+    const def = g.defs.find((d) => d.symbol === "unusedExport");
+    expect(def).toBeDefined();
+    const refs = g.refs.filter((r) => r.symbol === "unusedExport");
+    expect(refs).toHaveLength(0);
+  });
+
+  it("captures the require() source as an import edge", async () => {
+    const g = await extractGraph(src, "src/auth.js");
+    expect(g.imports).toContainEqual(
+      expect.objectContaining({ toPathOrModule: "./helper" }),
+    );
+  });
+
+  it("supports 'const x = require(...)', destructured, member-accessed, and bare require() forms", async () => {
+    const forms = `
+const { a } = require("./destructured");
+const b = require("./plain");
+const c = require("./accessed").thing;
+require("./sideeffect");
+`;
+    const g = await extractGraph(forms, "src/forms.js");
+    for (const mod of [
+      "./destructured",
+      "./plain",
+      "./accessed",
+      "./sideeffect",
+    ]) {
+      expect(g.imports).toContainEqual(
+        expect.objectContaining({ toPathOrModule: mod }),
+      );
+    }
+  });
+
+  it("does not emit an import edge for a dynamic or non-literal require() argument", async () => {
+    const dynamic = `
+const mod = require(someVariable);
+const concat = require("./a" + "b");
+`;
+    const g = await extractGraph(dynamic, "src/dynamic.js");
+    expect(g.imports).toEqual([]);
+  });
+});
+
 describe("extractGraph — Python (tree-sitter tier)", () => {
   const src = `
 import os

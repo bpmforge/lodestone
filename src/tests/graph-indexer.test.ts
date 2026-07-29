@@ -105,6 +105,32 @@ export function run(): number {
 }
 `,
     );
+
+    // CommonJS sibling of the util.ts/consumer.ts pair above: cjsHelperFn is
+    // defined here...
+    fs.writeFileSync(
+      path.join(repo.dir, "cjsUtil.js"),
+      `
+function cjsHelperFn() {
+  return 1;
+}
+
+module.exports = { cjsHelperFn };
+`,
+    );
+    // ...and only ever referenced (via require()) from a different file.
+    fs.writeFileSync(
+      path.join(repo.dir, "cjsConsumer.js"),
+      `
+const { cjsHelperFn } = require("./cjsUtil");
+
+function cjsRun() {
+  return cjsHelperFn();
+}
+
+module.exports = { cjsRun };
+`,
+    );
   });
 
   afterEach(() => {
@@ -115,7 +141,7 @@ export function run(): number {
   it("indexes all fixture files without errors", async () => {
     const result = await indexPath(repo.dir, dbHandle.db, fakeProvider);
     expect(result.errors).toEqual([]);
-    expect(result.indexed).toBe(4);
+    expect(result.indexed).toBe(6);
   });
 
   it("refs are a global (cross-file) xref: 'helperFn' is defined in util.ts and only referenced from consumer.ts", async () => {
@@ -138,6 +164,32 @@ export function run(): number {
     await indexPath(repo.dir, dbHandle.db, fakeProvider);
     const callers = dbHandle.db.queryCallers("checksum");
     expect(callers.map((c) => c.caller)).toContain("hash_password");
+  });
+
+  it("refs are a global (cross-file) xref: 'cjsHelperFn' is defined in cjsUtil.js and only referenced from cjsConsumer.js (CommonJS require())", async () => {
+    await indexPath(repo.dir, dbHandle.db, fakeProvider);
+    expect(dbHandle.db.queryDefs("cjsHelperFn").length).toBeGreaterThan(0);
+    const refs = dbHandle.db.queryRefs("cjsHelperFn");
+    expect(refs.length).toBeGreaterThan(0);
+    expect(
+      refs.some((r) => r.path === path.join(repo.dir, "cjsConsumer.js")),
+    ).toBe(true);
+  });
+
+  it("(a) who calls X: 'cjsHelperFn' resolves to caller 'cjsRun' across a require() cross-file boundary (CommonJS)", async () => {
+    await indexPath(repo.dir, dbHandle.db, fakeProvider);
+    const callers = dbHandle.db.queryCallers("cjsHelperFn");
+    expect(callers.map((c) => c.caller)).toContain("cjsRun");
+  });
+
+  it("(c) require() import edge is captured with extension-less specifier resolving cross-file (CommonJS)", async () => {
+    await indexPath(repo.dir, dbHandle.db, fakeProvider);
+    const cjsImports = dbHandle.db.queryImports(
+      path.join(repo.dir, "cjsConsumer.js"),
+    );
+    expect(cjsImports).toContainEqual(
+      expect.objectContaining({ toPathOrModule: "./cjsUtil" }),
+    );
   });
 
   it("(b) is export Y unused: 'deadCode' has a def and zero refs (TypeScript)", async () => {
@@ -176,7 +228,7 @@ export function run(): number {
     await indexPath(repo.dir, dbHandle.db, fakeProvider);
     const before = dbHandle.db.defCount();
     const result = await indexPath(repo.dir, dbHandle.db, fakeProvider);
-    expect(result.skipped).toBe(4);
+    expect(result.skipped).toBe(6);
     expect(dbHandle.db.defCount()).toBe(before);
   });
 

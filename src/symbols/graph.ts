@@ -238,6 +238,32 @@ function extractImports(
     return;
   }
 
+  // CommonJS require("./mod"). A require() call is a plain call_expression
+  // regardless of where it sits — bare statement, `const x = require(...)`,
+  // destructured `const { a, b } = require(...)`, or member-accessed
+  // `require(...).thing` — so matching at the call_expression level (rather
+  // than at the enclosing variable_declaration, the way ESM's
+  // import_statement is a dedicated node type) covers all four uniformly
+  // with one check, the same way a single `import_statement` match covers
+  // every ESM import shape. Only a single string-literal argument is
+  // statically resolvable; `require(someVar)` or `require("a" + "b")` is
+  // left unlinked rather than guessed at.
+  if (kind === "js-source" && node.type === "call_expression") {
+    const fn = node.childForFieldName("function");
+    if (fn?.type === "identifier" && fn.text === "require") {
+      const args = node.childForFieldName("arguments");
+      const argNodes = args ? namedChildrenOf(args) : [];
+      if (argNodes.length === 1 && argNodes[0].type === "string") {
+        imports.push({
+          fromPath: filePath,
+          toPathOrModule: stripQuotes(argNodes[0].text),
+          line: node.startPosition.row + 1,
+        });
+      }
+    }
+    return;
+  }
+
   if (kind === "py-import" && node.type === "import_statement") {
     for (const child of namedChildrenOf(node)) {
       if (child.type === "dotted_name" || child.type === "aliased_import") {
