@@ -1,0 +1,33 @@
+Copyright (c) 2026 Brad Matthews. All rights reserved.
+
+PROPRIETARY AND CONFIDENTIAL.
+
+This software is NOT open source and is NOT licensed for public use,
+redistribution, or commercial exploitation by any third party.
+
+No permission is granted to use, copy, modify, merge, publish, distribute,
+sublicense, or sell copies of this software, in whole or in part, except by
+the copyright holder or under a separate written agreement signed by them.
+
+WHY THIS IS NOT PUBLISHED (decision 2026-07-28)
+-----------------------------------------------
+Lodestone is an internal engine. It is consumed by first-party products
+(CodeReckon, RepoPulse) and is deliberately NOT published to any public
+package registry. The "private": true flag in package.json is the mechanical
+guard against accidental publication; do not remove it without recording a
+licensing decision in bpm-market-strategy.
+
+Two reasons publication was rejected rather than licensed restrictively:
+
+1. A restrictive dependency reached through the Apache-2.0 expert system
+   would quietly hollow out that project's own licence grant. install.sh
+   CLONES github.com/bpmforge/bpm-code-search-mcp publicly, so anything it
+   depends on binds every downstream installer — including the consultancies
+   the Apache-2.0 grant exists to attract.
+
+2. A licence stops someone selling this code. It does not stop them reading
+   it. The retrieval design is the moat; publishing hands that over whatever
+   the licence says.
+
+Consequence: bpm-code-search-mcp stays SELF-CONTAINED and must not take a
+dependency on this package.

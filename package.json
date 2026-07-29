@@ -1,7 +1,9 @@
 {
   "name": "@bpmforge/lodestone",
   "version": "0.1.0",
-  "description": "Lodestone — CPU-only code index + retrieval engine: cAST chunking, BM25F, symbol graph, concept-ontology expansion, evidence packets. Library + MCP server.",
+  "description": "Lodestone \u2014 CPU-only code index + retrieval engine: cAST chunking, BM25F, symbol graph, concept-ontology expansion, evidence packets. Library + MCP server.",
+  "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "main": "dist/lib.js",
   "module": "dist/lib.js",

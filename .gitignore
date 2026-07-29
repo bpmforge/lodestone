@@ -4,3 +4,7 @@ dist/
 *.db
 *.db-shm
 *.db-wal
+
+# Agent scratch + per-agent git worktrees. A worktree is a SECOND full checkout,
+# so leaving this untracked lets tooling lint or scan another agent copy of the tree.
+.claude/
