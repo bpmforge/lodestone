@@ -4,7 +4,11 @@ import {
   loadLanguage,
   getParser,
 } from "../chunker/languages.js";
-import { ADAPTERS, type LangAdapter } from "../chunker/adapters.js";
+import {
+  ADAPTERS,
+  type LangAdapter,
+  type Classification,
+} from "../chunker/adapters.js";
 import { extractSymbols } from "./extractor.js";
 
 /**
@@ -114,16 +118,75 @@ function namedChildrenOf(node: Node): Node[] {
   return node.namedChildren.filter((c): c is Node => c !== null);
 }
 
+/** Langs whose grammar is the JS/TS family — used to gate the CommonJS
+ *  export-assignment recognizer below (same set `IMPORT_NODE`'s "js-source"
+ *  covers). */
+const CJS_EXPORT_LANGS = new Set(["typescript", "tsx", "javascript"]);
+
+const CJS_FUNCTION_LIKE_VALUES = new Set([
+  "arrow_function",
+  "function_expression",
+  "function",
+  "generator_function",
+]);
+
+/**
+ * Recognizes `exports.X = <fn>` / `module.exports.X = <fn>` (CommonJS named
+ * export via property assignment) as a def named X — the property-assignment
+ * counterpart of the ESM-mirrored `const X = <fn>` unit match the chunker
+ * adapter already handles for `lexical_declaration`. Layered on top of (not
+ * inside) `adapter.classify()`, since `assignment_expression` isn't a node
+ * type the shared chunker adapters know about and this is CJS-specific.
+ *
+ * Deliberately NOT handled (explicit, not silent, gaps):
+ *   - `module.exports = { X: fn, Y() {} }` (object-literal export map) —
+ *     one assignment node can hold *multiple* defs (one per object member),
+ *     which doesn't fit the single-classification-per-node shape `walk()`
+ *     assumes below; would need a distinct multi-def traversal.
+ *   - `module.exports = function() {}` / `exports = {...}` (anonymous
+ *     whole-module export / bare reassignment) — no property name to
+ *     attribute a def to.
+ */
+function classifyCjsExportAssignment(
+  node: Node,
+  langId: string,
+): Classification | null {
+  if (!CJS_EXPORT_LANGS.has(langId)) return null;
+  if (node.type !== "assignment_expression") return null;
+
+  const left = node.childForFieldName("left");
+  const right = node.childForFieldName("right");
+  if (!left || !right || left.type !== "member_expression") return null;
+  if (!CJS_FUNCTION_LIKE_VALUES.has(right.type)) return null;
+
+  const property = left.childForFieldName("property");
+  if (!property || property.type !== "property_identifier") return null;
+
+  const object = left.childForFieldName("object");
+  if (!object) return null;
+  const isExports = object.type === "identifier" && object.text === "exports";
+  const isModuleExports =
+    object.type === "member_expression" &&
+    object.childForFieldName("object")?.text === "module" &&
+    object.childForFieldName("property")?.text === "exports";
+  if (!isExports && !isModuleExports) return null;
+
+  return { kind: "unit", label: property.text };
+}
+
 /**
  * Full-tree walk reusing the chunker's ADAPTERS.classify() so a def here is
  * the same node the chunker treats as a chunk-header symbol. Unlike the
  * chunker, this walks the *whole* tree (not just chunk boundaries) and
  * tracks container nesting to distinguish "function" from "method".
+ * `classifyCjsExportAssignment()` is layered on as a fallback so
+ * `exports.X = <fn>` gets the same def treatment.
  */
 function extractDefs(
   tree: Tree,
   filePath: string,
   adapter: LangAdapter,
+  langId: string,
 ): DefRow[] {
   const defs: DefRow[] = [];
 
@@ -132,7 +195,8 @@ function extractDefs(
   }
 
   function walk(node: Node, insideContainer: boolean): void {
-    const cls = adapter.classify(node);
+    const cls =
+      adapter.classify(node) ?? classifyCjsExportAssignment(node, langId);
     if (!cls) {
       walkChildren(node, insideContainer);
       return;
@@ -238,6 +302,32 @@ function extractImports(
     return;
   }
 
+  // CommonJS require("./mod"). A require() call is a plain call_expression
+  // regardless of where it sits — bare statement, `const x = require(...)`,
+  // destructured `const { a, b } = require(...)`, or member-accessed
+  // `require(...).thing` — so matching at the call_expression level (rather
+  // than at the enclosing variable_declaration, the way ESM's
+  // import_statement is a dedicated node type) covers all four uniformly
+  // with one check, the same way a single `import_statement` match covers
+  // every ESM import shape. Only a single string-literal argument is
+  // statically resolvable; `require(someVar)` or `require("a" + "b")` is
+  // left unlinked rather than guessed at.
+  if (kind === "js-source" && node.type === "call_expression") {
+    const fn = node.childForFieldName("function");
+    if (fn?.type === "identifier" && fn.text === "require") {
+      const args = node.childForFieldName("arguments");
+      const argNodes = args ? namedChildrenOf(args) : [];
+      if (argNodes.length === 1 && argNodes[0].type === "string") {
+        imports.push({
+          fromPath: filePath,
+          toPathOrModule: stripQuotes(argNodes[0].text),
+          line: node.startPosition.row + 1,
+        });
+      }
+    }
+    return;
+  }
+
   if (kind === "py-import" && node.type === "import_statement") {
     for (const child of namedChildrenOf(node)) {
       if (child.type === "dotted_name" || child.type === "aliased_import") {
@@ -305,13 +395,29 @@ function extractRefsCallsImports(
   // best-effort elsewhere — see module doc).
   const defNameRanges = new Set<string>();
   function markDefName(node: Node): void {
+    // classifyCjsExportAssignment()'s node shape is `assignment_expression`
+    // (left/right fields, no "name" field), so the generic lookup below
+    // never finds anything for it — without this branch, `exports.X = fn`'s
+    // own `X` property-name node would be recorded as a ref to itself,
+    // making a CJS property export permanently look "used" and defeating
+    // dead-code detection (see graph.test.ts "exports.X = <fn>" block).
+    if (node.type === "assignment_expression") {
+      const property = node
+        .childForFieldName("left")
+        ?.childForFieldName("property");
+      if (property) {
+        defNameRanges.add(`${property.startIndex}:${property.endIndex}`);
+        return;
+      }
+    }
     const nameNode = adapter.unwrap(node).childForFieldName("name");
     if (nameNode)
       defNameRanges.add(`${nameNode.startIndex}:${nameNode.endIndex}`);
   }
 
   function walk(node: Node, callerStack: string[]): void {
-    const cls = adapter.classify(node);
+    const cls =
+      adapter.classify(node) ?? classifyCjsExportAssignment(node, langId);
     let nextStack = callerStack;
     // See extractDefs() above: walk from the unwrapped node's children so a
     // wrapper (e.g. TS/JS `export_statement`) doesn't re-classify its own
@@ -371,7 +477,7 @@ function extractFromTree(
   langId: string,
   adapter: LangAdapter,
 ): GraphExtraction {
-  const defs = extractDefs(tree, filePath, adapter);
+  const defs = extractDefs(tree, filePath, adapter, langId);
 
   if (!CALL_NODE[langId]) {
     // Grammar verified for defs only (see module doc) — refs/calls/imports
