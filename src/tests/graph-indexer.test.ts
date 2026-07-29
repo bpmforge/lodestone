@@ -182,7 +182,7 @@ module.exports = { cjsRun };
     expect(callers.map((c) => c.caller)).toContain("cjsRun");
   });
 
-  it("(c) require() import edge is captured with extension-less specifier resolving cross-file (CommonJS)", async () => {
+  it("(c) require() import edge stores the literal extension-less specifier, same as ESM's './hash' above — this codebase does no path resolution anywhere; the 'who calls X' test above is the actual proof that cross-file linkage works, via the name-based calls/refs tables, not via this specifier", async () => {
     await indexPath(repo.dir, dbHandle.db, fakeProvider);
     const cjsImports = dbHandle.db.queryImports(
       path.join(repo.dir, "cjsConsumer.js"),

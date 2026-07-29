@@ -186,6 +186,63 @@ const concat = require("./a" + "b");
     const g = await extractGraph(dynamic, "src/dynamic.js");
     expect(g.imports).toEqual([]);
   });
+
+  it("also resolves for .ts and .tsx (require() is not JS-only in this codebase's grammar mapping)", async () => {
+    const tsSrc = `const x = require("./m");`;
+    const gTs = await extractGraph(tsSrc, "src/a.ts");
+    expect(gTs.imports).toContainEqual(
+      expect.objectContaining({ toPathOrModule: "./m" }),
+    );
+    const gTsx = await extractGraph(tsSrc, "src/a.tsx");
+    expect(gTsx.imports).toContainEqual(
+      expect.objectContaining({ toPathOrModule: "./m" }),
+    );
+  });
+});
+
+describe("extractGraph — CommonJS 'exports.X = <fn>' defining side (the D-03 repro shape)", () => {
+  // This is the actual dogfood-reported shape: a module that exports via
+  // property assignment rather than `module.exports = { name }` around a
+  // separately-declared `function name() {}`. Before this def was
+  // recognised, `helperFn` had no def row and the `inner()` call inside it
+  // was misattributed to caller "<module>" instead of "helperFn" — i.e.
+  // exactly "empty callers/callees on a require()-imported module".
+  const src = `
+function inner() {
+  return 1;
+}
+
+exports.helperFn = function () {
+  return inner();
+};
+
+module.exports.otherFn = () => {
+  return helperFn();
+};
+`;
+
+  it("'exports.X = function(){}' is recognised as a def named X", async () => {
+    const g = await extractGraph(src, "src/util.js");
+    expect(g.defs).toContainEqual(
+      expect.objectContaining({ symbol: "helperFn", kind: "function" }),
+    );
+  });
+
+  it("'module.exports.X = () => {}' is recognised as a def named X", async () => {
+    const g = await extractGraph(src, "src/util.js");
+    expect(g.defs).toContainEqual(
+      expect.objectContaining({ symbol: "otherFn", kind: "function" }),
+    );
+  });
+
+  it("a call inside 'exports.X = fn' is attributed to caller X, not '<module>'", async () => {
+    const g = await extractGraph(src, "src/util.js");
+    const callers = g.calls.filter((c) => c.callee === "inner");
+    expect(callers).toContainEqual(
+      expect.objectContaining({ caller: "helperFn" }),
+    );
+    expect(callers.some((c) => c.caller === "<module>")).toBe(false);
+  });
 });
 
 describe("extractGraph — Python (tree-sitter tier)", () => {
