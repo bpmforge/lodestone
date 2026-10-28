@@ -1,5 +1,5 @@
 # Security Concept Ontology — v0.2 (2026-07-16, W4-01 expansion)
-# PROPRIETARY — CodeReckon/RepoPulse moat asset. Moves to Lodestone repo when created.
+# MIT, with the rest of Lodestone (owner decision 2026-10-28).
 # Purpose: zero-LLM query expansion. query concept -> union(terms, subtokens, packages)
 #   -> BM25F (symbols boosted) + vector kNN -> RRF -> caller/callee cluster.
 # Also inverts to a COVERAGE signal: concept present in repo but no rule-pack hits => escalation trigger.

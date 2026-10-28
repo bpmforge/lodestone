@@ -2,6 +2,10 @@
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+- **Licence**: MIT, ontology included (owner decision 2026-10-28). Previously UNLICENSED and private. `"private": true` stays in package.json: it only guards against an accidental registry release.
+
 ## [0.1.0] — 2026-07-16
 
 Initial extraction from `bpm-code-search-mcp`. Lodestone becomes a standalone CPU-only code index + retrieval engine.

@@ -81,4 +81,4 @@ Kept external, adapter-wrapped: tree-sitter + grammars (MIT, foundational), the 
 7. Republish `bpm-code-search-mcp` as a thin dependency on `@bpmforge/lodestone` (MCP surface unchanged; expert-system install path untouched).
 8. CodeReckon + RepoPulse depend on the library; RepoPulse registers it as a `Scanner` with `inputs:'snapshot'`.
 
-Public posture: MIT-licensed engine is defensible (like the tools it wraps); the **ontology + proprietary rule packs stay closed** — that's the moat, not the search code.
+Public posture (revised 2026-10-28): Lodestone, its ontology and the bpm-rulepacks rules are all MIT. They ship inside an open-source RepoPulse, which an Apache product cannot do with closed dependencies.

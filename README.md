@@ -88,4 +88,4 @@ Extracted from `bpm-code-search-mcp` (2026-07-16). The engine + MCP server live 
 
 ## License
 
-MIT — the engine is moat-neutral (like the tools it wraps). The proprietary rule packs and the security concept ontology's curation are the moat, not the search code.
+MIT, including the security concept ontology (owner decision 2026-10-28, which reversed the 2026-07-28 decision to keep Lodestone private: it now ships inside an open-source RepoPulse, and the bpm-rulepacks rules are MIT too).
