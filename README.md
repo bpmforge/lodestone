@@ -88,4 +88,4 @@ Extracted from `bpm-code-search-mcp` (2026-07-16). The engine + MCP server live 
 
 ## License
 
-MIT — the engine is moat-neutral (like the tools it wraps). The proprietary rule packs and the security concept ontology's curation are the moat, not the search code.
+MIT. See [LICENSE](LICENSE).

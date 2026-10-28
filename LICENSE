@@ -1,33 +1,21 @@
-Copyright (c) 2026 Brad Matthews. All rights reserved.
+MIT License
 
-PROPRIETARY AND CONFIDENTIAL.
+Copyright (c) 2026 Brad Matthews
 
-This software is NOT open source and is NOT licensed for public use,
-redistribution, or commercial exploitation by any third party.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-No permission is granted to use, copy, modify, merge, publish, distribute,
-sublicense, or sell copies of this software, in whole or in part, except by
-the copyright holder or under a separate written agreement signed by them.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-WHY THIS IS NOT PUBLISHED (decision 2026-07-28)
------------------------------------------------
-Lodestone is an internal engine. It is consumed by first-party products
-(CodeReckon, RepoPulse) and is deliberately NOT published to any public
-package registry. The "private": true flag in package.json is the mechanical
-guard against accidental publication; do not remove it without recording a
-licensing decision in bpm-market-strategy.
-
-Two reasons publication was rejected rather than licensed restrictively:
-
-1. A restrictive dependency reached through the Apache-2.0 expert system
-   would quietly hollow out that project's own licence grant. install.sh
-   CLONES github.com/bpmforge/bpm-code-search-mcp publicly, so anything it
-   depends on binds every downstream installer — including the consultancies
-   the Apache-2.0 grant exists to attract.
-
-2. A licence stops someone selling this code. It does not stop them reading
-   it. The retrieval design is the moat; publishing hands that over whatever
-   the licence says.
-
-Consequence: bpm-code-search-mcp stays SELF-CONTAINED and must not take a
-dependency on this package.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
