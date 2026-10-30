@@ -85,11 +85,17 @@ const EMPTY_GRAPH: Omit<GraphExtraction, "method"> = {
   imports: [],
 };
 
+const PROSE_RE = /\.(md|mdx|markdown|rst|txt)$/i;
+
 export async function extractGraph(
   content: string,
   filePath: string,
 ): Promise<GraphExtraction> {
   if (content.trim().length === 0) return { ...EMPTY_GRAPH, method: "regex" };
+  // Prose is indexed for search, not for the graph: an example in a README
+  // or changelog is not a call site, and counting it made docs the callers
+  // of the functions they describe (and kept dead code looking "used").
+  if (PROSE_RE.test(filePath)) return { ...EMPTY_GRAPH, method: "regex" };
 
   const langId = languageForPath(filePath);
   const adapter = langId ? ADAPTERS[langId] : undefined;
@@ -240,23 +246,71 @@ function extractDefs(
 
 /** Node types treated as a call site, per tree-sitter grammar id, with the
  *  field holding the callee expression. Verified live against the actual
- *  grammar (see graph.test.ts) for typescript/tsx/javascript/python. */
-const CALL_NODE: Record<string, { type: string; functionField: string }> = {
-  typescript: { type: "call_expression", functionField: "function" },
-  tsx: { type: "call_expression", functionField: "function" },
-  javascript: { type: "call_expression", functionField: "function" },
-  python: { type: "call", functionField: "function" },
+ *  grammar (see graph.test.ts). ts/tsx/js/python take refs, calls and
+ *  imports from the tree; the rest take only CALLS from the tree and keep
+ *  the regex tier's refs/imports (see FULL_TREE_LANGS). */
+const CALL_NODE: Record<string, Array<{ type: string; functionField: string }>> = {
+  typescript: [{ type: "call_expression", functionField: "function" }],
+  tsx: [{ type: "call_expression", functionField: "function" }],
+  javascript: [{ type: "call_expression", functionField: "function" }],
+  python: [{ type: "call", functionField: "function" }],
+  go: [{ type: "call_expression", functionField: "function" }],
+  rust: [{ type: "call_expression", functionField: "function" }],
+  c: [{ type: "call_expression", functionField: "function" }],
+  cpp: [{ type: "call_expression", functionField: "function" }],
+  java: [{ type: "method_invocation", functionField: "name" }],
+  c_sharp: [{ type: "invocation_expression", functionField: "function" }],
+  ruby: [{ type: "call", functionField: "method" }],
+  php: [
+    { type: "function_call_expression", functionField: "function" },
+    { type: "member_call_expression", functionField: "name" },
+    { type: "nullsafe_member_call_expression", functionField: "name" },
+    { type: "scoped_call_expression", functionField: "name" },
+  ],
 };
 
-/** Member/attribute-access node types, per grammar id, used to resolve a
- *  callee like `obj.method()` down to `method` (the property/attribute
- *  name), and the field that holds that name. */
-const MEMBER_NODE: Record<string, { type: string; propertyField: string }> = {
-  typescript: { type: "member_expression", propertyField: "property" },
-  tsx: { type: "member_expression", propertyField: "property" },
-  javascript: { type: "member_expression", propertyField: "property" },
-  python: { type: "attribute", propertyField: "attribute" },
+/** Languages whose refs and imports also come from the tree. The others in
+ *  CALL_NODE get tree-sitter calls layered onto the regex tier, because
+ *  their refs (field/simple identifiers) and imports are not modelled here
+ *  yet. Keep in sync with graphReliability.ts. */
+const FULL_TREE_LANGS = new Set(["typescript", "tsx", "javascript", "python"]);
+
+/** A callee expression that is just a name. */
+const NAME_LEAF = new Set([
+  "identifier",
+  "field_identifier",
+  "property_identifier",
+  "name",
+]);
+
+/** Member/attribute/path access node types, and the field holding the
+ *  called name: `obj.method()` / `pkg.Fn()` / `m::h()` / `ns::k()` resolve
+ *  to `method` / `Fn` / `h` / `k`. Only ever applied to a call's callee
+ *  expression, so a type name shared across grammars cannot mislead it. */
+const MEMBER_FIELD: Record<string, string> = {
+  member_expression: "property",
+  attribute: "attribute",
+  selector_expression: "field",
+  field_expression: "field",
+  scoped_identifier: "name",
+  qualified_identifier: "name",
+  member_access_expression: "name",
+  qualified_name: "name",
 };
+
+/** The called name, or undefined when the callee has none — an immediately
+ *  invoked literal (`func(){...}()`, `(() => x)()`), a call on a call's
+ *  result, a subscript. Recording those under a placeholder name ("func")
+ *  linked every anonymous function in a repo to every other. */
+function calleeName(fnNode: Node): string | undefined {
+  if (NAME_LEAF.has(fnNode.type)) return fnNode.text;
+  const field = MEMBER_FIELD[fnNode.type];
+  if (field) {
+    const named = fnNode.childForFieldName(field);
+    return named ? calleeName(named) : undefined;
+  }
+  return undefined;
+}
 
 /** Import-ish node types, per grammar id. Handled individually below since
  *  the shape (single source string vs. dotted-name list) differs. */
@@ -267,15 +321,6 @@ const IMPORT_NODE: Record<string, ImportKind> = {
   javascript: "js-source",
   python: "py-import",
 };
-
-function calleeName(fnNode: Node, langId: string): string | undefined {
-  if (fnNode.type === "identifier") return fnNode.text;
-  const member = MEMBER_NODE[langId];
-  if (member && fnNode.type === member.type) {
-    return fnNode.childForFieldName(member.propertyField)?.text;
-  }
-  return undefined;
-}
 
 function stripQuotes(text: string): string {
   return text.replace(/^['"`]|['"`]$/g, "");
@@ -386,7 +431,7 @@ function extractRefsCallsImports(
   const calls: CallRow[] = [];
   const imports: ImportRow[] = [];
 
-  const callNode = CALL_NODE[langId];
+  const callNodes = CALL_NODE[langId] ?? [];
 
   // Best-effort exclusion set: the exact source range of each def's own
   // "name" node, so its declaration site isn't double-counted as a ref to
@@ -435,9 +480,10 @@ function extractRefsCallsImports(
 
     extractImports(node, langId, filePath, imports);
 
-    if (callNode && node.type === callNode.type) {
+    const callNode = callNodes.find((c) => c.type === node.type);
+    if (callNode) {
       const fnNode = node.childForFieldName(callNode.functionField);
-      const callee = fnNode ? calleeName(fnNode, langId) : undefined;
+      const callee = fnNode ? calleeName(fnNode) : undefined;
       if (callee) {
         calls.push({
           caller:
@@ -479,12 +525,16 @@ function extractFromTree(
 ): GraphExtraction {
   const defs = extractDefs(tree, filePath, adapter, langId);
 
-  if (!CALL_NODE[langId]) {
-    // Grammar verified for defs only (see module doc) — refs/calls/imports
-    // for these languages come from the regex tier instead, layered onto
-    // the tree-sitter-accurate defs.
+  if (!FULL_TREE_LANGS.has(langId)) {
+    // Refs/imports for these languages come from the regex tier, layered
+    // onto the tree-sitter-accurate defs. Calls come from the tree when the
+    // grammar's call node is known: the regex tier's `identifier(` scan
+    // reads keywords, literals and comments as calls.
     const fallback = extractFromRegex(tree.rootNode.text, filePath, defs);
-    return { ...fallback, defs, method: "tree-sitter" };
+    const calls = CALL_NODE[langId]
+      ? extractRefsCallsImports(tree, filePath, langId, adapter).calls
+      : fallback.calls;
+    return { ...fallback, calls, defs, method: "tree-sitter" };
   }
 
   const { refs, calls, imports } = extractRefsCallsImports(
