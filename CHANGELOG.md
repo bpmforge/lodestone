@@ -2,6 +2,11 @@
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+- **`@bpmforge/lodestone/graph` entry**: `extractGraph`, `languageForPath`, `EXT_TO_LANG` and `isCrossFileGraphReliable` with no SQLite, no sqlite-vec and no MCP SDK in their import graph (`graph-entry.test.ts` walks it). For consumers that store the graph themselves, such as RepoPulse's per-scan code index.
+- **Packaging**: `files` limits the package to `dist`, `ontology` and the docs (62 kB packed); `better-sqlite3`, `sqlite-vec`, `@modelcontextprotocol/sdk` and `zod` are optional peer dependencies (and dev dependencies here), so a graph-only consumer installs no native addon. The full library and the MCP server still need them installed.
+
 ## [0.1.0] — 2026-07-16
 
 Initial extraction from `bpm-code-search-mcp`. Lodestone becomes a standalone CPU-only code index + retrieval engine.
