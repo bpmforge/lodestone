@@ -1,7 +1,7 @@
 {
   "name": "@bpmforge/lodestone",
   "version": "0.1.0",
-  "description": "Lodestone \u2014 CPU-only code index + retrieval engine: cAST chunking, BM25F, symbol graph, concept-ontology expansion, evidence packets. Library + MCP server.",
+  "description": "Lodestone — CPU-only code index + retrieval engine: cAST chunking, BM25F, symbol graph, concept-ontology expansion, evidence packets. Library + MCP server.",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -13,14 +13,25 @@
       "types": "./dist/lib.d.ts",
       "import": "./dist/lib.js"
     },
+    "./graph": {
+      "types": "./dist/graph.d.ts",
+      "import": "./dist/graph.js"
+    },
     "./package.json": "./package.json"
   },
+  "files": [
+    "dist",
+    "ontology",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "bin": {
     "lodestone-mcp": "dist/mcp.js",
     "bpm-code-search-mcp": "dist/mcp.js"
   },
   "scripts": {
-    "build": "tsup src/lib.ts src/mcp.ts src/index.ts --format esm --dts --out-dir dist",
+    "build": "tsup src/lib.ts src/graph.ts src/mcp.ts src/index.ts --format esm --dts --out-dir dist",
     "dev": "tsup src/mcp.ts --format esm --watch",
     "prepare": "npm run build",
     "test": "vitest run",
@@ -28,21 +39,41 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
-    "better-sqlite3": "^11.10.0",
     "glob": "^11.0.0",
-    "sqlite-vec": "^0.1.9",
     "tree-sitter-wasms": "^0.1.13",
     "web-tree-sitter": "^0.25.9",
-    "yaml": "^2.9.0",
+    "yaml": "^2.9.0"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "better-sqlite3": "^11.10.0",
+    "sqlite-vec": "^0.1.9",
     "zod": "^3.25.0"
   },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    },
+    "better-sqlite3": {
+      "optional": true
+    },
+    "sqlite-vec": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
+    "better-sqlite3": "^11.10.0",
+    "sqlite-vec": "^0.1.9",
     "tsup": "^8.4.0",
     "typescript": "^5.8.0",
-    "vitest": "^3.2.0"
+    "vitest": "^3.2.0",
+    "zod": "^3.25.0"
   },
   "engines": {
     "node": ">=20"
